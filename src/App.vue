@@ -23,10 +23,8 @@
 
       <StatsPage
         v-else
-        :total-sessions="totalSessions"
-        :total-balls="totalBalls"
-        :most-used-club-name="mostUsedClubName"
-        :best-shot="bestShot"
+        :sessions="sessions"
+        :clubs="clubs"
       />
     </main>
   </div>
@@ -52,55 +50,39 @@ export default {
         { id: 3, name: '52° Wedge', typicalDistance: 105, notes: 'Dial-in' }
       ],
 
+      // NEW MODEL: one session per visit, many entries per club
       sessions: [
         {
-          id: 101,
-          date: '2025-11-14',
-          clubId: 1,
-          ballsHit: 60,
-          averageDistance: 240,
-          bestDistance: 280,
-          notes: 'Solid practice'
+          id: 1,
+          date: '2025-11-18',
+          notes: 'Evening grind',
+          entries: [
+            {
+              id: 1,
+              clubId: 1,
+              ballsHit: 40,
+              averageDistance: 240,
+              bestDistance: 275
+            },
+            {
+              id: 2,
+              clubId: 2,
+              ballsHit: 30,
+              averageDistance: 165,
+              bestDistance: 185
+            }
+          ]
         }
       ]
     }
   },
 
   computed: {
-    // 👇 SORT BY TYPICAL DISTANCE DESCENDING
+    // sort bag by distance DESC so 8 iron drops in between 7i and Driver
     sortedClubs() {
       return [...this.clubs].sort(
         (a, b) => b.typicalDistance - a.typicalDistance
       )
-    },
-
-    totalSessions() {
-      return this.sessions.length
-    },
-
-    totalBalls() {
-      return this.sessions.reduce((sum, s) => sum + (s.ballsHit || 0), 0)
-    },
-
-    bestShot() {
-      if (!this.sessions.length) return null
-      return Math.max(...this.sessions.map(s => s.bestDistance || 0))
-    },
-
-    mostUsedClubName() {
-      if (!this.sessions.length) return null
-
-      const counts = {}
-      for (const s of this.sessions) {
-        counts[s.clubId] = (counts[s.clubId] || 0) + 1
-      }
-
-      const topId = Number(
-        Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
-      )
-
-      const club = this.clubs.find(c => c.id === topId)
-      return club ? club.name : null
     }
   },
 
@@ -129,32 +111,25 @@ export default {
       })
     },
 
+    // payload = { date, notes, entries: [{ clubId, ballsHit, averageDistance, bestDistance }] }
     addSession(payload) {
-      const {
-        date,
-        clubId,
-        ballsHit,
-        averageDistance,
-        bestDistance,
-        notes
-      } = payload
+      const { date, notes, entries } = payload
+      if (!date || !entries || !entries.length) return
 
-      if (!date || !clubId || !ballsHit || !averageDistance || !bestDistance) {
-        return
-      }
-
-      const nextId = this.sessions.length
+      const nextSessionId = this.sessions.length
         ? Math.max(...this.sessions.map(s => s.id)) + 1
         : 1
 
+      const entriesWithIds = entries.map((entry, idx) => ({
+        id: idx + 1,
+        ...entry
+      }))
+
       this.sessions.push({
-        id: nextId,
+        id: nextSessionId,
         date,
-        clubId,
-        ballsHit,
-        averageDistance,
-        bestDistance,
-        notes: notes.trim()
+        notes: notes.trim(),
+        entries: entriesWithIds
       })
     }
   }
@@ -162,9 +137,8 @@ export default {
 </script>
 
 <style scoped>
-/* THEME VARIABLES */
 .app.dark {
-  --bg: #071423; /* midnight blue family */
+  --bg: #071423;
   --card: #111827;
   --text: #f9fafb;
   --muted: #9ca3af;
