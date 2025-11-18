@@ -9,7 +9,7 @@
     <div class="card wizard-card">
       <h2>Log Session</h2>
       <p class="wizard-step-label">
-        Step {{ stepNumber }} of 5 · {{ stepTitle }}
+        Step {{ stepNumber }} of 4 · {{ stepTitle }}
       </p>
 
       <!-- STEP 1: DATE -->
@@ -54,107 +54,46 @@
           <button
             class="primary-btn"
             :disabled="wizard.selectedClubIds.length === 0"
-            @click="startBallsStep"
+            @click="startClubFlow"
           >
             Next
           </button>
         </div>
       </div>
 
-      <!-- STEP 3: BALLS PER CLUB -->
-      <div v-else-if="step === 'balls'" class="wizard-step">
+      <!-- STEP 3: PER-CLUB FLOW (balls -> avg -> best for each club) -->
+      <div v-else-if="step === 'club'" class="wizard-step">
         <p class="muted">
-          Club {{ currentIndex + 1 }} of {{ wizard.entries.length }}
+          Club {{ currentClubIndex + 1 }} of {{ wizard.entries.length }}
         </p>
         <h3>{{ currentClubName }}</h3>
 
         <label class="field">
-          How many balls did you hit with this club?
+          {{ currentQuestion }}
           <input
-            v-model.number="wizard.entries[currentIndex].ballsHit"
             type="number"
             min="1"
-            placeholder="e.g. 40"
+            :placeholder="currentPlaceholder"
+            :value="currentValue"
+            @input="updateCurrentValue($event.target.value)"
           />
         </label>
 
         <div class="wizard-actions">
-          <button class="secondary-btn" @click="prevClubOrBackFromBalls">
+          <button class="secondary-btn" @click="prevClubStep">
             Back
           </button>
           <button
             class="primary-btn"
-            :disabled="!wizard.entries[currentIndex].ballsHit"
-            @click="nextBallsStep"
+            :disabled="!currentValue"
+            @click="nextClubStep"
           >
             Next
           </button>
         </div>
       </div>
 
-      <!-- STEP 4: AVG DISTANCE PER CLUB -->
-      <div v-else-if="step === 'avg'" class="wizard-step">
-        <p class="muted">
-          Club {{ currentIndex + 1 }} of {{ wizard.entries.length }}
-        </p>
-        <h3>{{ currentClubName }}</h3>
-
-        <label class="field">
-          What was your average distance with this club? (yd)
-          <input
-            v-model.number="wizard.entries[currentIndex].averageDistance"
-            type="number"
-            min="1"
-            placeholder="e.g. 235"
-          />
-        </label>
-
-        <div class="wizard-actions">
-          <button class="secondary-btn" @click="prevClubOrBackFromAvg">
-            Back
-          </button>
-          <button
-            class="primary-btn"
-            :disabled="!wizard.entries[currentIndex].averageDistance"
-            @click="nextAvgStep"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 5: BEST DISTANCE PER CLUB -->
-      <div v-else-if="step === 'best'" class="wizard-step">
-        <p class="muted">
-          Club {{ currentIndex + 1 }} of {{ wizard.entries.length }}
-        </p>
-        <h3>{{ currentClubName }}</h3>
-
-        <label class="field">
-          What was your best shot with this club? (yd)
-          <input
-            v-model.number="wizard.entries[currentIndex].bestDistance"
-            type="number"
-            min="1"
-            placeholder="e.g. 270"
-          />
-        </label>
-
-        <div class="wizard-actions">
-          <button class="secondary-btn" @click="prevClubOrBackFromBest">
-            Back
-          </button>
-          <button
-            class="primary-btn"
-            :disabled="!wizard.entries[currentIndex].bestDistance"
-            @click="nextBestStep"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 6: REVIEW -->
+      <!-- STEP 4: REVIEW -->
       <div v-else-if="step === 'review'" class="wizard-step">
         <p class="muted">Quick review before saving.</p>
 
@@ -187,7 +126,7 @@
         </label>
 
         <div class="wizard-actions">
-          <button class="secondary-btn" @click="step = 'best'">
+          <button class="secondary-btn" @click="backFromReview">
             Back
           </button>
           <button class="primary-btn" @click="saveSession">
@@ -266,14 +205,15 @@ export default {
   data() {
     const today = new Date().toISOString().slice(0, 10)
     return {
-      step: 'date', // 'date' | 'clubs' | 'balls' | 'avg' | 'best' | 'review'
+      step: 'date', // 'date' | 'clubs' | 'club' | 'review'
       wizard: {
         date: today,
         selectedClubIds: [],
         entries: [],
         notes: ''
       },
-      currentIndex: 0,
+      currentClubIndex: 0,
+      currentField: 'balls', // 'balls' | 'avg' | 'best'
       expandedSessionId: null
     }
   },
@@ -283,9 +223,12 @@ export default {
       return [...this.sessions].sort((a, b) => b.date.localeCompare(a.date))
     },
 
+    currentEntry() {
+      return this.wizard.entries[this.currentClubIndex] || null
+    },
+
     currentClubId() {
-      const entry = this.wizard.entries[this.currentIndex]
-      return entry ? entry.clubId : null
+      return this.currentEntry ? this.currentEntry.clubId : null
     },
 
     currentClubName() {
@@ -294,8 +237,33 @@ export default {
       return club ? club.name : 'Unknown club'
     },
 
+    currentValue() {
+      if (!this.currentEntry) return ''
+      if (this.currentField === 'balls') return this.currentEntry.ballsHit
+      if (this.currentField === 'avg') return this.currentEntry.averageDistance
+      if (this.currentField === 'best') return this.currentEntry.bestDistance
+      return ''
+    },
+
+    currentQuestion() {
+      if (this.currentField === 'balls') {
+        return 'How many balls did you hit with this club?'
+      } else if (this.currentField === 'avg') {
+        return 'What was your average distance with this club? (yd)'
+      } else {
+        return 'What was your best shot with this club? (yd)'
+      }
+    },
+
+    currentPlaceholder() {
+      if (this.currentField === 'balls') return 'e.g. 40'
+      if (this.currentField === 'avg') return 'e.g. 235'
+      if (this.currentField === 'best') return 'e.g. 270'
+      return ''
+    },
+
     stepNumber() {
-      const map = { date: 1, clubs: 2, balls: 3, avg: 4, best: 5, review: 6 }
+      const map = { date: 1, clubs: 2, club: 3, review: 4 }
       return map[this.step] || 1
     },
 
@@ -305,12 +273,8 @@ export default {
           return 'Pick the date'
         case 'clubs':
           return 'Choose clubs you used'
-        case 'balls':
-          return 'Balls hit per club'
-        case 'avg':
-          return 'Average distance per club'
-        case 'best':
-          return 'Best shot per club'
+        case 'club':
+          return 'Fill stats for each club'
         case 'review':
           return 'Review & save'
         default:
@@ -327,80 +291,87 @@ export default {
       this.step = 'clubs'
     },
 
-    startBallsStep() {
+    startClubFlow() {
       if (!this.wizard.selectedClubIds.length) return
 
-      // create entries skeleton
+      // Create per-club entries
       this.wizard.entries = this.wizard.selectedClubIds.map(id => ({
         clubId: id,
         ballsHit: null,
         averageDistance: null,
         bestDistance: null
       }))
-      this.currentIndex = 0
-      this.step = 'balls'
+      this.currentClubIndex = 0
+      this.currentField = 'balls'
+      this.step = 'club'
     },
 
-    nextBallsStep() {
-      if (!this.wizard.entries[this.currentIndex].ballsHit) return
+    updateCurrentValue(raw) {
+      if (!this.currentEntry) return
+      const value = raw === '' ? null : Number(raw)
+      if (Number.isNaN(value) || value <= 0) {
+        if (this.currentField === 'balls') this.currentEntry.ballsHit = null
+        if (this.currentField === 'avg') this.currentEntry.averageDistance = null
+        if (this.currentField === 'best') this.currentEntry.bestDistance = null
+        return
+      }
 
-      if (this.currentIndex < this.wizard.entries.length - 1) {
-        this.currentIndex++
-      } else {
-        this.currentIndex = 0
-        this.step = 'avg'
+      if (this.currentField === 'balls') this.currentEntry.ballsHit = value
+      if (this.currentField === 'avg') this.currentEntry.averageDistance = value
+      if (this.currentField === 'best') this.currentEntry.bestDistance = value
+    },
+
+    nextClubStep() {
+      if (!this.currentValue) return
+
+      // Move within club: balls -> avg -> best
+      if (this.currentField === 'balls') {
+        this.currentField = 'avg'
+        return
+      }
+      if (this.currentField === 'avg') {
+        this.currentField = 'best'
+        return
+      }
+
+      // At 'best'
+      if (this.currentField === 'best') {
+        // If not last club: go to next club, back to balls
+        if (this.currentClubIndex < this.wizard.entries.length - 1) {
+          this.currentClubIndex++
+          this.currentField = 'balls'
+        } else {
+          // Last club done -> review
+          this.step = 'review'
+        }
       }
     },
 
-    prevClubOrBackFromBalls() {
-      if (this.currentIndex > 0) {
-        this.currentIndex--
-      } else {
-        this.step = 'clubs'
+    prevClubStep() {
+      // Go backwards within the flow
+      if (this.currentField === 'balls') {
+        // we're at first field for a club
+        if (this.currentClubIndex === 0) {
+          // jump back to club selection
+          this.step = 'clubs'
+        } else {
+          // go to previous club, last field
+          this.currentClubIndex--
+          this.currentField = 'best'
+        }
+      } else if (this.currentField === 'avg') {
+        this.currentField = 'balls'
+      } else if (this.currentField === 'best') {
+        this.currentField = 'avg'
       }
     },
 
-    nextAvgStep() {
-      if (!this.wizard.entries[this.currentIndex].averageDistance) return
-
-      if (this.currentIndex < this.wizard.entries.length - 1) {
-        this.currentIndex++
-      } else {
-        this.currentIndex = 0
-        this.step = 'best'
-      }
+    backFromReview() {
+      // go back to last club / best field
+      this.step = 'club'
+      this.currentClubIndex = this.wizard.entries.length - 1
+      this.currentField = 'best'
     },
-
-    prevClubOrBackFromAvg() {
-      if (this.currentIndex > 0) {
-        this.currentIndex--
-      } else {
-        this.step = 'balls'
-        this.currentIndex = this.wizard.entries.length - 1
-      }
-    },
-
-    prevClubOrBackFromBest() {
-      if (this.currentIndex > 0) {
-        this.currentIndex--
-      } else {
-        this.step = 'avg'
-        this.currentIndex = this.wizard.entries.length - 1
-      }
-    },
-
-    nextBestStep() {
-  if (!this.wizard.entries[this.currentIndex].bestDistance) return
-
-  if (this.currentIndex < this.wizard.entries.length - 1) {
-    // go to next club in "best" step
-    this.currentIndex++
-  } else {
-    // last club done → go to review screen
-    this.step = 'review'
-  }
-}
-,
 
     saveSession() {
       const payload = {
@@ -421,7 +392,8 @@ export default {
         entries: [],
         notes: ''
       }
-      this.currentIndex = 0
+      this.currentClubIndex = 0
+      this.currentField = 'balls'
     },
 
     // --- DISPLAY HELPERS ---
@@ -477,20 +449,12 @@ export default {
 }
 
 input,
-textarea,
-select {
+textarea {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   color: var(--text);
   padding: 0.5rem;
-}
-
-/* dark-mode dropdown fix */
-select,
-option {
-  background-color: var(--card);
-  color: var(--text);
 }
 
 textarea {
