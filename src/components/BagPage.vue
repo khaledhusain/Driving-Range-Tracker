@@ -10,14 +10,36 @@
         :key="club.id"
         class="club-card"
       >
-        <div class="club-main">
-          <div class="club-text">
-            <h2 class="club-name">{{ club.name }}</h2>
-            <p v-if="club.notes" class="club-notes">{{ club.notes }}</p>
+        <!-- Red delete background, fully inside card -->
+        <div
+          class="delete-bg"
+          :class="{ open: swipeState[club.id]?.open }"
+          @click="handleDelete(club.id)"
+        >
+          <span class="trash-icon">🗑</span>
+        </div>
+
+        <!-- Swipeable content -->
+        <div
+          class="swipe-track"
+          :class="{ dragging: swipeState[club.id]?.dragging }"
+          :style="{
+            transform: `translateX(${swipeState[club.id]?.offset || 0}px)`
+          }"
+          @touchstart="onTouchStart(club.id, $event)"
+          @touchmove="onTouchMove(club.id, $event)"
+          @touchend="onTouchEnd(club.id)"
+          @mousedown="onMouseDown(club.id, $event)"
+        >
+          <div class="club-main">
+            <div class="club-text">
+              <h2 class="club-name">{{ club.name }}</h2>
+              <p v-if="club.notes" class="club-notes">{{ club.notes }}</p>
+            </div>
+            <span class="distance-pill">
+              {{ club.typicalDistance }} yd
+            </span>
           </div>
-          <span class="distance-pill">
-            {{ club.typicalDistance }} yd
-          </span>
         </div>
       </article>
     </div>
@@ -78,6 +100,9 @@
 </template>
 
 <script>
+const MAX_REVEAL = 140      // how far left you can swipe (more than before)
+const OPEN_THRESHOLD = -70  // how much you need to swipe to "lock" it open
+
 export default {
   props: {
     clubs: { type: Array, required: true }
@@ -89,10 +114,13 @@ export default {
         name: '',
         distance: null,
         notes: ''
-      }
+      },
+      swipeState: {},       // per-club swipe info
+      mouseDraggingId: null // for desktop drag
     }
   },
   methods: {
+    /* -------- Add club modal -------- */
     openModal() {
       this.showModal = true
     },
@@ -109,7 +137,129 @@ export default {
         notes: this.form.notes.trim()
       })
       this.closeModal()
+    },
+
+    handleDelete(id) {
+      this.$emit('delete-club', id)
+      const copy = { ...this.swipeState }
+      delete copy[id]
+      this.swipeState = copy
+    },
+
+    ensureSwipeState(id) {
+      if (!this.swipeState[id]) {
+        this.swipeState = {
+          ...this.swipeState,
+          [id]: {
+            startX: 0,
+            offset: 0,
+            dragging: false,
+            open: false,
+            resetTimer: null
+          }
+        }
+      }
+      return this.swipeState[id]
+    },
+
+    scheduleReset(id) {
+      const state = this.ensureSwipeState(id)
+
+      if (state.resetTimer) {
+        clearTimeout(state.resetTimer)
+      }
+
+      state.resetTimer = setTimeout(() => {
+        const s = this.ensureSwipeState(id)
+        if (!s.open) return
+        s.offset = 0        // slide back
+        s.open = false
+        s.resetTimer = null
+      }, 2200)              // a bit slower
+    },
+
+    /* -------- Touch swipe handlers -------- */
+    onTouchStart(id, event) {
+      const state = this.ensureSwipeState(id)
+      state.startX = event.touches[0].clientX
+      state.dragging = true
+    },
+    onTouchMove(id, event) {
+      const state = this.ensureSwipeState(id)
+      if (!state.dragging) return
+
+      const currentX = event.touches[0].clientX
+      const deltaX = currentX - state.startX
+
+      if (deltaX < 0) {
+        state.offset = Math.max(deltaX, -MAX_REVEAL)
+      } else {
+        state.offset = Math.min(deltaX, 0)
+      }
+    },
+    onTouchEnd(id) {
+      const state = this.ensureSwipeState(id)
+
+      if (state.offset <= OPEN_THRESHOLD) {
+        state.offset = -MAX_REVEAL
+        state.open = true
+        this.scheduleReset(id)
+      } else {
+        state.offset = 0
+        state.open = false
+      }
+      state.dragging = false
+    },
+
+    /* -------- Mouse swipe handlers (desktop) -------- */
+    onMouseDown(id, event) {
+      const state = this.ensureSwipeState(id)
+      state.startX = event.clientX
+      state.dragging = true
+      this.mouseDraggingId = id
+      window.addEventListener('mousemove', this.onMouseMove)
+      window.addEventListener('mouseup', this.onMouseUp)
+    },
+    onMouseMove(event) {
+      const id = this.mouseDraggingId
+      if (!id) return
+      const state = this.ensureSwipeState(id)
+      if (!state.dragging) return
+
+      const currentX = event.clientX
+      const deltaX = currentX - state.startX
+
+      if (deltaX < 0) {
+        state.offset = Math.max(deltaX, -MAX_REVEAL)
+      } else {
+        state.offset = Math.min(deltaX, 0)
+      }
+    },
+    onMouseUp() {
+      const id = this.mouseDraggingId
+      if (!id) return
+      const state = this.ensureSwipeState(id)
+
+      if (state.offset <= OPEN_THRESHOLD) {
+        state.offset = -MAX_REVEAL
+        state.open = true
+        this.scheduleReset(id)
+      } else {
+        state.offset = 0
+        state.open = false
+      }
+      state.dragging = false
+      this.mouseDraggingId = null
+      window.removeEventListener('mousemove', this.onMouseMove)
+      window.removeEventListener('mouseup', this.onMouseUp)
     }
+  },
+  beforeUnmount() {
+    window.removeEventListener('mousemove', this.onMouseMove)
+    window.removeEventListener('mouseup', this.onMouseUp)
+    Object.values(this.swipeState).forEach(state => {
+      if (state.resetTimer) clearTimeout(state.resetTimer)
+    })
   }
 }
 </script>
@@ -129,7 +279,7 @@ export default {
   text-transform: uppercase;
 }
 
-/* list container is centered, cards are full width inside it */
+/* centered column of cards */
 .bag-list {
   width: 100%;
   max-width: 800px;
@@ -138,23 +288,65 @@ export default {
   gap: 1.5rem;
 }
 
-/* club card = full width brutalist rectangle */
+/* outer wrapper: border, background, no bleed */
 .club-card {
+  position: relative;
   width: 100%;
   border: 1px solid var(--border);
   background: var(--card);
-  padding: 1.1rem 1.3rem;
   border-radius: 2px;
-  transition: transform 0.12s ease, border-color 0.12s ease,
-    background-color 0.12s ease;
+  overflow: hidden; /* prevents swipe bleed */
 }
 
-.club-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
+/* red delete panel INSIDE card */
+.delete-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 140px;
+  background: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.4rem;
 }
 
-/* layout inside card */
+/* trash animation when open */
+.delete-bg.open .trash-icon {
+  animation: trash-pop 0.3s ease-out;
+}
+
+@keyframes trash-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* movable content layer */
+.swipe-track {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1.1rem 1.3rem;
+  transition: transform 0.28s ease; /* slower slide back */
+}
+
+.swipe-track.dragging {
+  transition: none;
+}
+
 .club-main {
   display: flex;
   align-items: center;
@@ -188,11 +380,11 @@ export default {
   white-space: nowrap;
 }
 
-.club-card:hover .distance-pill {
+.swipe-track:hover .distance-pill {
   background: rgba(47, 122, 76, 0.35);
 }
 
-/* floating add button */
+/* floating green + */
 .fab {
   position: fixed;
   right: 2rem;
@@ -220,6 +412,7 @@ export default {
   filter: brightness(1.05);
 }
 
+/* modal */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -285,6 +478,7 @@ textarea {
 textarea {
   resize: vertical;
 }
+
 .primary-btn {
   align-self: flex-end;
   margin-top: 0.2rem;
@@ -297,4 +491,12 @@ textarea {
   font-weight: 600;
   font-size: 0.9rem;
 }
+.club-card {
+  background: var(--card);      /* solid */
+}
+
+.swipe-track {
+  background: var(--card);      /* solid */
+}
+
 </style>

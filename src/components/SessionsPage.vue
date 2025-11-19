@@ -1,173 +1,44 @@
 <template>
-  <section>
-    <h1>Range Sessions</h1>
-    <p class="subtitle">
-      One card per visit. Inside each session: stats for every club you used.
-    </p>
+  <section class="sessions-page">
+    <!-- Header -->
+    <h1 class="sessions-title">RANGE SESSIONS</h1>
 
-    <!-- WIZARD CARD -->
-    <div class="card wizard-card">
-      <h2>Log Session</h2>
-      <p class="wizard-step-label">
-        Step {{ stepNumber }} of 4 · {{ stepTitle }}
-      </p>
+    <!-- Big LOG SESSION button -->
+    <button class="log-btn" @click="openModal">
+      LOG SESSION
+    </button>
 
-      <!-- STEP 1: DATE -->
-      <div v-if="step === 'date'" class="wizard-step">
-        <label class="field">
-          Date
-          <input v-model="wizard.date" type="date" />
-        </label>
+    <!-- Past sessions label -->
+    <p class="past-label">Past Sessions</p>
 
-        <div class="wizard-actions">
-          <button class="secondary-btn" disabled>Back</button>
-          <button
-            class="primary-btn"
-            :disabled="!wizard.date"
-            @click="goToClubs"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 2: CLUBS -->
-      <div v-else-if="step === 'clubs'" class="wizard-step">
-        <p class="muted">Which clubs did you actually hit this session?</p>
-        <div class="club-checkboxes">
-          <label
-            v-for="club in clubs"
-            :key="club.id"
-            class="checkbox-pill"
-          >
-            <input
-              type="checkbox"
-              :value="club.id"
-              v-model="wizard.selectedClubIds"
-            />
-            <span>{{ club.name }}</span>
-          </label>
-        </div>
-
-        <div class="wizard-actions">
-          <button class="secondary-btn" @click="step = 'date'">Back</button>
-          <button
-            class="primary-btn"
-            :disabled="wizard.selectedClubIds.length === 0"
-            @click="startClubFlow"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 3: PER-CLUB FLOW (balls -> avg -> best for each club) -->
-      <div v-else-if="step === 'club'" class="wizard-step">
-        <p class="muted">
-          Club {{ currentClubIndex + 1 }} of {{ wizard.entries.length }}
-        </p>
-        <h3>{{ currentClubName }}</h3>
-
-        <label class="field">
-          {{ currentQuestion }}
-          <input
-            type="number"
-            min="1"
-            :placeholder="currentPlaceholder"
-            :value="currentValue"
-            @input="updateCurrentValue($event.target.value)"
-          />
-        </label>
-
-        <div class="wizard-actions">
-          <button class="secondary-btn" @click="prevClubStep">
-            Back
-          </button>
-          <button
-            class="primary-btn"
-            :disabled="!currentValue"
-            @click="nextClubStep"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 4: REVIEW -->
-      <div v-else-if="step === 'review'" class="wizard-step">
-        <p class="muted">Quick review before saving.</p>
-
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>Club</th>
-              <th>Balls</th>
-              <th>Avg (yd)</th>
-              <th>Best (yd)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="entry in wizard.entries" :key="entry.clubId">
-              <td>{{ clubName(entry.clubId) }}</td>
-              <td>{{ entry.ballsHit }}</td>
-              <td>{{ entry.averageDistance }}</td>
-              <td>{{ entry.bestDistance }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <label class="field" style="margin-top: 0.75rem;">
-          Notes (optional)
-          <textarea
-            v-model="wizard.notes"
-            rows="2"
-            placeholder="Evening grind, focused on driver tempo"
-          />
-        </label>
-
-        <div class="wizard-actions">
-          <button class="secondary-btn" @click="backFromReview">
-            Back
-          </button>
-          <button class="primary-btn" @click="saveSession">
-            Save session
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- SESSION LIST -->
-    <div class="card-list">
+    <!-- Session list -->
+    <div class="session-list">
       <article
         v-for="session in sessionsSorted"
         :key="session.id"
-        class="card session-card"
+        class="session-card"
       >
         <header class="session-header" @click="toggleExpanded(session.id)">
-          <div>
-            <h3>{{ formatDate(session.date) }}</h3>
-            <p class="muted">
-              {{ session.entries.length }} club<span v-if="session.entries.length > 1">s</span>
+          <div class="session-left">
+            <h2 class="session-date">
+              {{ formatDate(session.date) }}
+            </h2>
+            <p class="session-sub">
+              {{ session.entries.length }} club<span v-if="session.entries.length !== 1">s</span>
               · {{ totalBalls(session) }} balls
             </p>
           </div>
           <div class="session-right">
-            <span class="pill small">
+            <span class="best-pill">
               Best: {{ bestShot(session) }} yd
-            </span>
-            <span class="clubs-inline">
-              <span
-                v-for="entry in session.entries"
-                :key="entry.id"
-                class="club-chip"
-              >
-                {{ clubName(entry.clubId) }}
-              </span>
             </span>
           </div>
         </header>
 
-        <div v-if="expandedSessionId === session.id" class="session-details">
+        <div
+          v-if="expandedSessionId === session.id"
+          class="session-details"
+        >
           <table class="summary-table">
             <thead>
               <tr>
@@ -186,11 +57,156 @@
               </tr>
             </tbody>
           </table>
-          <p v-if="session.notes" class="notes">
+          <p v-if="session.notes" class="session-notes">
             {{ session.notes }}
           </p>
         </div>
       </article>
+    </div>
+
+    <!-- Modal: Log Session wizard -->
+    <div
+      v-if="showModal"
+      class="modal-backdrop"
+      @click.self="closeModal"
+    >
+      <div class="modal-card sessions-modal">
+        <header class="modal-header">
+          <h2>Log Session</h2>
+          <button class="modal-close" @click="closeModal">×</button>
+        </header>
+
+        <p class="wizard-step-label">
+          Step {{ stepNumber }} of 4 · {{ stepTitle }}
+        </p>
+
+        <!-- STEP 1: DATE -->
+        <div v-if="step === 'date'" class="wizard-step">
+          <label class="field">
+            Date
+            <input v-model="wizard.date" type="date" />
+          </label>
+
+          <div class="wizard-actions">
+            <button class="secondary-btn" disabled>Back</button>
+            <button
+              class="primary-btn"
+              :disabled="!wizard.date"
+              @click="goToClubs"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 2: CLUBS -->
+        <div v-else-if="step === 'clubs'" class="wizard-step">
+          <p class="muted">
+            Which clubs did you hit this session?
+          </p>
+          <div class="club-checkboxes">
+            <label
+              v-for="club in clubs"
+              :key="club.id"
+              class="checkbox-pill"
+            >
+              <input
+                type="checkbox"
+                :value="club.id"
+                v-model="wizard.selectedClubIds"
+              />
+              <span>{{ club.name }}</span>
+            </label>
+          </div>
+
+          <div class="wizard-actions">
+            <button class="secondary-btn" @click="step = 'date'">
+              Back
+            </button>
+            <button
+              class="primary-btn"
+              :disabled="wizard.selectedClubIds.length === 0"
+              @click="startClubFlow"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 3: PER-CLUB FLOW -->
+        <div v-else-if="step === 'club'" class="wizard-step">
+          <p class="muted club-counter">
+            Club {{ currentClubIndex + 1 }} of {{ wizard.entries.length }}
+          </p>
+          <h3 class="club-name-title">{{ currentClubName }}</h3>
+
+          <label class="field">
+            {{ currentQuestion }}
+            <input
+              type="number"
+              min="1"
+              :placeholder="currentPlaceholder"
+              :value="currentValue"
+              @input="updateCurrentValue($event.target.value)"
+            />
+          </label>
+
+          <div class="wizard-actions">
+            <button class="secondary-btn" @click="prevClubStep">
+              Back
+            </button>
+            <button
+              class="primary-btn"
+              :disabled="!currentValue"
+              @click="nextClubStep"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 4: REVIEW -->
+        <div v-else-if="step === 'review'" class="wizard-step">
+          <p class="muted">Review before saving.</p>
+
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Club</th>
+                <th>Balls</th>
+                <th>Avg (yd)</th>
+                <th>Best (yd)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="entry in wizard.entries" :key="entry.clubId">
+                <td>{{ clubName(entry.clubId) }}</td>
+                <td>{{ entry.ballsHit }}</td>
+                <td>{{ entry.averageDistance }}</td>
+                <td>{{ entry.bestDistance }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <label class="field notes-field">
+            Notes (optional)
+            <textarea
+              v-model="wizard.notes"
+              rows="2"
+              placeholder="Evening grind, focused on driver tempo"
+            />
+          </label>
+
+          <div class="wizard-actions">
+            <button class="secondary-btn" @click="backFromReview">
+              Back
+            </button>
+            <button class="primary-btn" @click="saveSession">
+              Save session
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -205,6 +221,8 @@ export default {
   data() {
     const today = new Date().toISOString().slice(0, 10)
     return {
+      showModal: false,
+
       step: 'date', // 'date' | 'clubs' | 'club' | 'review'
       wizard: {
         date: today,
@@ -214,13 +232,16 @@ export default {
       },
       currentClubIndex: 0,
       currentField: 'balls', // 'balls' | 'avg' | 'best'
+
       expandedSessionId: null
     }
   },
 
   computed: {
     sessionsSorted() {
-      return [...this.sessions].sort((a, b) => b.date.localeCompare(a.date))
+      return [...this.sessions].sort((a, b) =>
+        b.date.localeCompare(a.date)
+      )
     },
 
     currentEntry() {
@@ -240,8 +261,10 @@ export default {
     currentValue() {
       if (!this.currentEntry) return ''
       if (this.currentField === 'balls') return this.currentEntry.ballsHit
-      if (this.currentField === 'avg') return this.currentEntry.averageDistance
-      if (this.currentField === 'best') return this.currentEntry.bestDistance
+      if (this.currentField === 'avg')
+        return this.currentEntry.averageDistance
+      if (this.currentField === 'best')
+        return this.currentEntry.bestDistance
       return ''
     },
 
@@ -284,8 +307,16 @@ export default {
   },
 
   methods: {
-    // --- WIZARD FLOW ---
+    /* -------- modal control -------- */
+    openModal() {
+      this.showModal = true
+    },
+    closeModal() {
+      this.showModal = false
+      this.resetWizard()
+    },
 
+    /* -------- wizard flow -------- */
     goToClubs() {
       if (!this.wizard.date) return
       this.step = 'clubs'
@@ -294,13 +325,13 @@ export default {
     startClubFlow() {
       if (!this.wizard.selectedClubIds.length) return
 
-      // Create per-club entries
       this.wizard.entries = this.wizard.selectedClubIds.map(id => ({
         clubId: id,
         ballsHit: null,
         averageDistance: null,
         bestDistance: null
       }))
+
       this.currentClubIndex = 0
       this.currentField = 'balls'
       this.step = 'club'
@@ -311,20 +342,23 @@ export default {
       const value = raw === '' ? null : Number(raw)
       if (Number.isNaN(value) || value <= 0) {
         if (this.currentField === 'balls') this.currentEntry.ballsHit = null
-        if (this.currentField === 'avg') this.currentEntry.averageDistance = null
-        if (this.currentField === 'best') this.currentEntry.bestDistance = null
+        if (this.currentField === 'avg')
+          this.currentEntry.averageDistance = null
+        if (this.currentField === 'best')
+          this.currentEntry.bestDistance = null
         return
       }
 
       if (this.currentField === 'balls') this.currentEntry.ballsHit = value
-      if (this.currentField === 'avg') this.currentEntry.averageDistance = value
-      if (this.currentField === 'best') this.currentEntry.bestDistance = value
+      if (this.currentField === 'avg')
+        this.currentEntry.averageDistance = value
+      if (this.currentField === 'best')
+        this.currentEntry.bestDistance = value
     },
 
     nextClubStep() {
       if (!this.currentValue) return
 
-      // Move within club: balls -> avg -> best
       if (this.currentField === 'balls') {
         this.currentField = 'avg'
         return
@@ -334,28 +368,22 @@ export default {
         return
       }
 
-      // At 'best'
+      // at best
       if (this.currentField === 'best') {
-        // If not last club: go to next club, back to balls
         if (this.currentClubIndex < this.wizard.entries.length - 1) {
           this.currentClubIndex++
           this.currentField = 'balls'
         } else {
-          // Last club done -> review
           this.step = 'review'
         }
       }
     },
 
     prevClubStep() {
-      // Go backwards within the flow
       if (this.currentField === 'balls') {
-        // we're at first field for a club
         if (this.currentClubIndex === 0) {
-          // jump back to club selection
           this.step = 'clubs'
         } else {
-          // go to previous club, last field
           this.currentClubIndex--
           this.currentField = 'best'
         }
@@ -367,7 +395,6 @@ export default {
     },
 
     backFromReview() {
-      // go back to last club / best field
       this.step = 'club'
       this.currentClubIndex = this.wizard.entries.length - 1
       this.currentField = 'best'
@@ -380,7 +407,7 @@ export default {
         entries: this.wizard.entries.map(e => ({ ...e }))
       }
       this.$emit('add-session', payload)
-      this.resetWizard()
+      this.closeModal()
     },
 
     resetWizard() {
@@ -396,8 +423,7 @@ export default {
       this.currentField = 'balls'
     },
 
-    // --- DISPLAY HELPERS ---
-
+    /* -------- helpers for list -------- */
     clubName(id) {
       const club = this.clubs.find(c => c.id === id)
       return club ? club.name : 'Unknown club'
@@ -420,142 +446,114 @@ export default {
     },
 
     toggleExpanded(id) {
-      this.expandedSessionId = this.expandedSessionId === id ? null : id
+      this.expandedSessionId =
+        this.expandedSessionId === id ? null : id
     }
   }
 }
 </script>
 
 <style scoped>
-.wizard-card {
-  margin-bottom: 1rem;
-}
-
-.wizard-step-label {
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-bottom: 0.5rem;
-}
-
-.wizard-step h3 {
-  margin-bottom: 0.4rem;
-}
-
-.field {
+.sessions-page {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.9rem;
+  align-items: center;
+  gap: 1.25rem;
 }
 
-input,
-textarea {
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  color: var(--text);
-  padding: 0.5rem;
+.sessions-title {
+  text-align: center;
+  font-size: 2.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-textarea {
-  resize: vertical;
-}
-
-.wizard-actions {
+/* centered content column */
+.session-list {
+  width: 100%;
+  max-width: 800px;
   display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.primary-btn {
-  padding: 0.45rem 1.1rem;
+.log-btn {
+  margin-top: 0.25rem;
+  padding: 0.7rem 2.4rem;
   border-radius: 999px;
-  border: none;
-  background: var(--accent);
-  color: #022c22;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease,
+    border-color 0.15s ease;
+}
+
+.log-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #022c22;
+  transform: translateY(-1px);
+}
+
+.past-label {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+/* session cards */
+.session-card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 2px;
+  padding: 0.85rem 1.1rem;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+}
+
+.session-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.session-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.session-date {
+  font-size: 1.05rem;
   font-weight: 600;
 }
 
-.secondary-btn {
-  padding: 0.45rem 1.1rem;
+.session-sub {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.best-pill {
+  padding: 0.2rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.primary-btn:disabled,
-.secondary-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.club-checkboxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-}
-
-.checkbox-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.checkbox-pill input {
-  accent-color: var(--accent);
-}
-
-/* sessions list */
-.session-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-}
-
-.session-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.25rem;
-}
-
-.pill {
-  padding: 0.2rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(47, 122, 76, 0.2);
-  color: var(--accent);
   font-size: 0.8rem;
+  background: rgba(47, 122, 76, 0.18);
+  color: var(--accent);
 }
 
-.pill.small {
-  font-size: 0.75rem;
-}
-
-.clubs-inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  justify-content: flex-end;
-}
-
-.club-chip {
-  font-size: 0.75rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-}
-
+/* details below header */
 .session-details {
   margin-top: 0.6rem;
 }
@@ -577,8 +575,156 @@ textarea {
   font-weight: 600;
 }
 
-.notes {
-  margin-top: 0.5rem;
+.session-notes {
+  margin-top: 0.4rem;
   font-size: 0.9rem;
+}
+
+/* modal / wizard styles */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+
+.modal-card.sessions-modal {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.1rem 1.3rem 1.3rem;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  font-size: 1.1rem;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.wizard-step-label {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.wizard-step {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+input,
+textarea {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.muted {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.club-counter {
+  margin-bottom: -0.2rem;
+}
+
+.club-name-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* wizard controls */
+.wizard-actions {
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.primary-btn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #022c22;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.secondary-btn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.club-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.checkbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.checkbox-pill input {
+  accent-color: var(--accent);
+}
+
+.notes-field {
+  margin-top: 0.3rem;
 }
 </style>

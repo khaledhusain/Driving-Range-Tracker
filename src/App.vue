@@ -8,12 +8,15 @@
     />
 
     <main class="content">
+      <!-- BAG PAGE -->
       <BagPage
         v-if="currentPage === 'bag'"
         :clubs="sortedClubs"
         @add-club="addClub"
+        @delete-club="deleteClub"
       />
 
+      <!-- SESSIONS PAGE -->
       <SessionsPage
         v-else-if="currentPage === 'sessions'"
         :clubs="sortedClubs"
@@ -21,6 +24,7 @@
         @add-session="addSession"
       />
 
+      <!-- STATS PAGE -->
       <StatsPage
         v-else
         :sessions="sessions"
@@ -41,16 +45,17 @@ export default {
 
   data() {
     return {
-      theme: 'dark',
-      currentPage: 'bag',
+      theme: 'dark',          // 'dark' | 'light'
+      currentPage: 'bag',     // 'bag' | 'sessions' | 'stats'
 
+      // clubs WITH ids
       clubs: [
         { id: 1, name: 'Driver', typicalDistance: 250, notes: 'Big tee shots' },
         { id: 2, name: '7 Iron', typicalDistance: 165, notes: 'Reliable' },
         { id: 3, name: '52° Wedge', typicalDistance: 105, notes: 'Dial-in' }
       ],
 
-      // NEW MODEL: one session per visit, many entries per club
+      // sessions: one per visit, multiple clubs inside
       sessions: [
         {
           id: 1,
@@ -78,7 +83,7 @@ export default {
   },
 
   computed: {
-    // sort bag by distance DESC so 8 iron drops in between 7i and Driver
+    // sort by distance DESC so longer clubs sit higher
     sortedClubs() {
       return [...this.clubs].sort(
         (a, b) => b.typicalDistance - a.typicalDistance
@@ -95,12 +100,14 @@ export default {
       this.theme = this.theme === 'dark' ? 'light' : 'dark'
     },
 
+    // called from BagPage modal
     addClub(payload) {
       const { name, typicalDistance, notes } = payload
       if (!name || !typicalDistance) return
 
+      // make sure every club has a unique id
       const nextId = this.clubs.length
-        ? Math.max(...this.clubs.map(c => c.id)) + 1
+        ? Math.max(...this.clubs.map(c => c.id || 0)) + 1
         : 1
 
       this.clubs.push({
@@ -111,7 +118,12 @@ export default {
       })
     },
 
-    // payload = { date, notes, entries: [{ clubId, ballsHit, averageDistance, bestDistance }] }
+    // swipe-to-delete from BagPage
+    deleteClub(id) {
+      this.clubs = this.clubs.filter(c => c.id !== id)
+    },
+
+    // sessions: payload = { date, notes, entries: [{ clubId, ballsHit, averageDistance, bestDistance }] }
     addSession(payload) {
       const { date, notes, entries } = payload
       if (!date || !entries || !entries.length) return
@@ -138,21 +150,23 @@ export default {
 
 <style scoped>
 .app.dark {
+  /* dark mode – match midnight blue logo */
   --bg: #071423;
-  --card: #111827;
+  --card: #0b1826;
   --text: #f9fafb;
   --muted: #9ca3af;
   --accent: #2f7a4c;
-  --border: #273549;
+  --border: #1f2937;
 }
 
 .app.light {
+  /* light mode – match cream logo background */
   --bg: #f4eee5;
   --card: #ffffff;
   --text: #111827;
   --muted: #6b7280;
   --accent: #2f7a4c;
-  --border: #e1ded7;
+  --border: #ddd4c7;
 }
 
 .app {
@@ -161,7 +175,6 @@ export default {
   color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .content {
@@ -169,45 +182,5 @@ export default {
   margin: 0 auto;
   padding: 1.5rem 1rem 2.5rem;
 }
-
-.subtitle {
-  margin-top: -0.5rem;
-  margin-bottom: 1rem;
-  color: var(--muted);
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0.85rem;
-  padding: 1rem 1.2rem;
-  box-shadow: 0 18px 35px rgba(0, 0, 0, 0.2);
-}
-
-.card + .card {
-  margin-top: 0.8rem;
-}
-
-.card-list {
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.8rem;
-}
-
-.stat-card .label {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.stat-card .value {
-  font-size: 1.25rem;
-  font-weight: 600;
-}
 </style>
+
